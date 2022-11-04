@@ -8,7 +8,7 @@ import pymysql.cursors
 from utils import normalize
 
 
-def create_nodes(file_path, filename, number, d_headwords, geocoding=False):
+def create_nodes(file_path, filename, number, G, d_headwords, geocoding=False, verbose=False):
 
     try:
         tree = etree.parse(file_path + filename)
@@ -124,7 +124,8 @@ def create_nodes(file_path, filename, number, d_headwords, geocoding=False):
                                 lat_altNames = float(rec[1])
                                 long_altNames = float(rec[2])
 
-                        print('name ' + k + ' - ' + str(len(records)) + ' - ' + str(res))
+                        if verbose:
+                            print('name ' + k + ' - ' + str(len(records)) + ' - ' + str(res))
 
 
                         ''' Add node '''
@@ -142,13 +143,13 @@ def create_nodes(file_path, filename, number, d_headwords, geocoding=False):
             else:
 
                 ''' Add node '''
-                G.add_node(k, filename=filename, latitude=lat, longitude=long, author=author, normclass=normclass, volume=volume, number=number,
+                G.add_node(k, filename=filename, author=author, normclass=normclass, volume=volume, number=number,
                        alt_names=alt_names, nb_wrd=nbwords, nb_en=nbEN, nb_ene=nbENE, nb_placeEDDA=nbNameEDDA,
                        nb_ene_place=nbENEPlace, nb_ENGeocoded=nbENGeocoded, nbENEDDAGeocoded=nbENEDDAGeocoded,
                        nb_en_pers=nbPers, nb_enePerson=nbENEPers, typegeo=type_geo, latlong=latlong,
                        latlong_value=latlong_val)
-
-            print('Create node : ' + k + ' = ' + str(d_headwords[k]))
+            if verbose:
+                print('Create node : ' + k + ' = ' + str(d_headwords[k]))
 
     except etree.XMLSyntaxError as e:
         print('Error : ' + str(e))
@@ -313,7 +314,7 @@ def key_headwords(head_value):
     return next(iter(headword))
 
 
-def create_edges(file_path, filename, number):
+def create_edges(file_path, filename, number, G, d_headwords, verbose=False):
     try:
 
         tree = etree.parse(file_path+filename)
@@ -340,7 +341,7 @@ def create_edges(file_path, filename, number):
 
                 if token == 'grande bretagne' or token == 'grande - bretagne' or token == 'grande-bretagne':
                     token = 'bretagne (grande)'
-                    print('token = bretagne (grande)')
+                    #print('token = bretagne (grande)')
                     #time.sleep(5)
 
                 for c, v in d_headwords.items():
@@ -349,7 +350,8 @@ def create_edges(file_path, filename, number):
                             number_node = G.nodes[key]['number']
                             # check the number of article of the corresponding node
                             if number == number_node:
-                                print("Create edge : " + key + ' -> ' + c)
+                                if verbose:
+                                    print("Create edge : " + key + ' -> ' + c)
                                 G.add_edge(key, c)
 
     except etree.XMLSyntaxError as e:
@@ -475,7 +477,7 @@ if __name__ == "__main__":
     if createNetwork:
 
         d_headwords = {}
-        headwords = []
+       
 
         G = nx.DiGraph()
 
@@ -488,7 +490,7 @@ if __name__ == "__main__":
             if extension == '.xml':
                 m = re.match("\w+-(\d+)", file_id)
                 number = m.groups()[0]
-                create_nodes(input_path, doc, number, geocoding)
+                create_nodes(input_path, doc, number, G, d_headwords, geocoding)
         
         # create edges
         for doc in os.listdir(input_path):
@@ -499,7 +501,7 @@ if __name__ == "__main__":
             if extension == '.xml':
                 m = re.match("\w+-(\d+)", file_id)
                 number = m.groups()[0]
-                create_edges(input_path, doc, number)
+                create_edges(input_path, doc, G, number)
 
         # save graph
         nx.write_gexf(G, output_path + 'network-'+outputSuffix+'.gexf')

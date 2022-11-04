@@ -559,7 +559,7 @@ if __name__ == "__main__":
     output_path = './output/'
     output_sync = output_path # '/Users/lmoncla/ownCloud/Recherche/Projets/2019 - MSH GéoDISCO/Data/output/'
 
-    outputSuffix = 'v20221003'
+    outputSuffix = 'v20221103'
 
     createNetwork = True
 

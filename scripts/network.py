@@ -90,7 +90,7 @@ def create_nodes(file_path, filename, number, G, d_headwords, geocoding=False, v
                 connection = pymysql.connect(
                     host="localhost",
                     user="lmoncla",
-                    passwd="lentropie",
+                    passwd="*****",
                     database="wikiGazetteer"
                 )
                 try:

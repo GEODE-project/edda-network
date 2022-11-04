@@ -8,7 +8,7 @@ import pymysql.cursors
 from utils import normalize
 
 
-def create_nodes_with_geocoding(file_path, filename, number, cursor):
+def create_nodes(file_path, filename, number, d_headwords, geocoding=False):
 
     try:
         tree = etree.parse(file_path + filename)
@@ -29,7 +29,7 @@ def create_nodes_with_geocoding(file_path, filename, number, cursor):
 
             ''' on normalise et stock le noeud dans un dictionnaire '''
 
-            k = norm_headwords(head_value.lower())
+            k = norm_headwords(head_value.lower(), d_headwords)
 
             alt_names = ', '.join(d_headwords[k])
 
@@ -67,40 +67,7 @@ def create_nodes_with_geocoding(file_path, filename, number, cursor):
             for w in div1.xpath(".//rs[@type='articleClass']/following::w[2]"):
                 w2 = w.text.lower()
 
-            type_geo = ''
-            if w1 != '':
-                if w1 == 'ville' or w1 == 'village' or w1 == 'capitale' or w1 == 'bourgade' or w1 == 'bourg' or w1 == 'cité' or w1 == 'municipe':
-                    w1 = 'ville'
-
-                if w1 == 'pays' or w1 == 'province' or w1 == 'royaume' or w1 == 'contrée' or w1 == 'gouvernement' or w1 == 'canton' \
-                        or w1 == 'principauté' or w1 == 'district' or w1 == 'duché':
-                    w1 = 'pays'
-
-                if w1 == 'fleuve' or w1 == 'riviere' or w1 == 'rivière' or w1 == 'lac' or w1 == 'marais' or w1 == 'golfe' or w1 == 'baie':
-                    w1 = 'hydronyme'
-
-                if w1 == 'île' or w2 == 'îles' or w2 == 'isle':
-                    w1 = 'île'
-
-                if w1 == 'ville' or w1 == 'pays' or w1 == 'hydronyme' or w1 == 'montagne' or w1 == 'ruine' or w1 == 'île':
-                    type_geo = w1
-
-            if w2 != '':
-                if w2 == 'ville' or w2 == 'village' or w2 == 'capitale' or w2 == 'bourgade' or w2 == 'bourg' or w2 == 'cité' or w2 == 'municipe':
-                    w2 = 'ville'
-
-                if w2 == 'pays' or w2 == 'province' or w2 == 'royaume' or w2 == 'contrée' or w2 == 'gouvernement' or w2 == 'canton' \
-                        or w2 == 'principauté' or w2 == 'district' or w2 == 'duché':
-                    w2 = 'pays'
-
-                if w2 == 'fleuve' or w2 == 'riviere' or w2 == 'rivière' or w2 == 'lac' or w2 == 'marais' or w2 == 'golfe' or w2 == 'baie':
-                    w2 = 'hydronyme'
-
-                if w2 == 'île' or w2 == 'îles' or w2 == 'isle':
-                    w2 = 'île'
-
-                if w2 == 'ville' or w2 == 'pays' or w2 == 'hydronyme' or w2 == 'montagne' or w2 == 'ruine' or w2 == 'île':
-                    type_geo = w2
+            type_geo = get_node_type(w1, w2)
 
             #  print('nb words: ' + str(nbwords))
             #  print('nb en: ' + str(nb_en))
@@ -110,48 +77,76 @@ def create_nodes_with_geocoding(file_path, filename, number, cursor):
             #  print('nb type_equal: ' + str(type_equal))
             #  print('nb type_different: ' + str(type_different))
             #  print('latlong: ' + str(latlong))
-            lat = ''
-            long = ''
-            lat_altNames = ''
-            long_altNames = ''
-            ''' GEOCODING '''
-            query = 'SELECT wiki_title, lat, lon, type, country, region FROM location WHERE wiki_title="' + k + '"'
-            cursor.execute(query)
-            res = ''
-            records = cursor.fetchall()
-            for i, rec in enumerate(records):
-                res += str(rec)
-                if i == 0:
-                    lat = float(rec[1])
-                    long = float(rec[2])
-
-            ''' GEOCODING alternate names'''
-            query = 'SELECT wiki_title, lat, lon, type, country, region FROM location JOIN altname ' \
-                    'ON altname.main_id = location.id WHERE altname = "' + k + '"'
-            cursor.execute(query)
-            res_altnames = ''
-            records_altnames = cursor.fetchall()
-            for i, rec in enumerate(records_altnames):
-                res_altnames += str(rec)
-                if i == 0:
-                    lat_altNames = float(rec[1])
-                    long_altNames = float(rec[2])
-
-            print('name ' + k + ' - ' + str(len(records)) + ' - ' + str(res))
 
             if len(latlongValue) > 0:
                 latlong_val = '; '.join(latlongValue)
             else:
                 latlong_val = ''
 
-            ''' Add node '''
-            G.add_node(k, filename=filename, latitude=lat, longitude=long, author=author, normclass=normclass, volume=volume, number=number,
+
+            if geocoding:
+
+                 # Connect to the database for geocoding
+                connection = pymysql.connect(
+                    host="localhost",
+                    user="lmoncla",
+                    passwd="lentropie",
+                    database="wikiGazetteer"
+                )
+                try:
+                    with connection.cursor() as cursor:
+
+
+                        lat = ''
+                        long = ''
+                        lat_altNames = ''
+                        long_altNames = ''
+                        ''' GEOCODING '''
+                        query = 'SELECT wiki_title, lat, lon, type, country, region FROM location WHERE wiki_title="' + k + '"'
+                        cursor.execute(query)
+                        res = ''
+                        records = cursor.fetchall()
+                        for i, rec in enumerate(records):
+                            res += str(rec)
+                            if i == 0:
+                                lat = float(rec[1])
+                                long = float(rec[2])
+
+                        ''' GEOCODING alternate names'''
+                        query = 'SELECT wiki_title, lat, lon, type, country, region FROM location JOIN altname ' \
+                                'ON altname.main_id = location.id WHERE altname = "' + k + '"'
+                        cursor.execute(query)
+                        res_altnames = ''
+                        records_altnames = cursor.fetchall()
+                        for i, rec in enumerate(records_altnames):
+                            res_altnames += str(rec)
+                            if i == 0:
+                                lat_altNames = float(rec[1])
+                                long_altNames = float(rec[2])
+
+                        print('name ' + k + ' - ' + str(len(records)) + ' - ' + str(res))
+
+
+                        ''' Add node '''
+                        G.add_node(k, filename=filename, latitude=lat, longitude=long, author=author, normclass=normclass, volume=volume, number=number,
+                            alt_names=alt_names, nb_wrd=nbwords, nb_en=nbEN, nb_ene=nbENE, nb_placeEDDA=nbNameEDDA,
+                            nb_ene_place=nbENEPlace, nb_ENGeocoded=nbENGeocoded, nbENEDDAGeocoded=nbENEDDAGeocoded,
+                            nb_en_pers=nbPers, nb_enePerson=nbENEPers, typegeo=type_geo, latlong=latlong,
+                            latlong_value=latlong_val, nbWikiRecords=len(records), geocoding=res,
+                            nbWikiRecords_altNames=len(records_altnames), geocoding_altNames=res_altnames, lat_altNames=lat_altNames,
+                            long_altNames=long_altNames)
+
+                finally:
+                    connection.close()
+
+            else:
+
+                ''' Add node '''
+                G.add_node(k, filename=filename, latitude=lat, longitude=long, author=author, normclass=normclass, volume=volume, number=number,
                        alt_names=alt_names, nb_wrd=nbwords, nb_en=nbEN, nb_ene=nbENE, nb_placeEDDA=nbNameEDDA,
                        nb_ene_place=nbENEPlace, nb_ENGeocoded=nbENGeocoded, nbENEDDAGeocoded=nbENEDDAGeocoded,
                        nb_en_pers=nbPers, nb_enePerson=nbENEPers, typegeo=type_geo, latlong=latlong,
-                       latlong_value=latlong_val, nbWikiRecords=len(records), geocoding=res,
-                       nbWikiRecords_altNames=len(records_altnames), geocoding_altNames=res_altnames, lat_altNames=lat_altNames,
-                       long_altNames=long_altNames)
+                       latlong_value=latlong_val)
 
             print('Create node : ' + k + ' = ' + str(d_headwords[k]))
 
@@ -159,157 +154,63 @@ def create_nodes_with_geocoding(file_path, filename, number, cursor):
         print('Error : ' + str(e))
 
 
+def get_node_type(w1, w2):
+    type_geo = ''
+    if w1 != '':
+        if w1 == 'ville' or w1 == 'village' or w1 == 'capitale' or w1 == 'bourgade' or w1 == 'bourg' or w1 == 'cité' or w1 == 'municipe':
+            w1 = 'ville'
 
-def create_nodes(file_path, filename, number):
+        if w1 == 'pays' or w1 == 'province' or w1 == 'royaume' or w1 == 'contrée' or w1 == 'gouvernement' or w1 == 'canton' \
+                or w1 == 'principauté' or w1 == 'district' or w1 == 'duché':
+            w1 = 'pays'
 
-    try:
-        tree = etree.parse(file_path + filename)
-        root = tree.getroot()
+        if w1 == 'fleuve' or w1 == 'riviere' or w1 == 'rivière' or w1 == 'lac' or w1 == 'marais' or w1 == 'golfe' or w1 == 'baie':
+            w1 = 'hydronyme'
 
-        for div1 in root.findall('./text/body/div1'):
+        if w1 == 'île' or w2 == 'îles' or w2 == 'isle':
+            w1 = 'île'
 
-            volume = div1.get('vol')
-            # <index type="head"
-            for index in root.findall(".//index[@type='head']"):
-                head_value = index.get('value')
+        if w1 == 'ville' or w1 == 'pays' or w1 == 'hydronyme' or w1 == 'montagne' or w1 == 'ruine' or w1 == 'île':
+            type_geo = w1
 
-            for index in root.findall(".//index[@type='normclass']"):
-                normclass = index.get('value')
+    if w2 != '':
+        if w2 == 'ville' or w2 == 'village' or w2 == 'capitale' or w2 == 'bourgade' or w2 == 'bourg' or w2 == 'cité' or w2 == 'municipe':
+            w2 = 'ville'
 
-            for index in root.findall(".//index[@type='author']"):
-                author = index.get('value')
+        if w2 == 'pays' or w2 == 'province' or w2 == 'royaume' or w2 == 'contrée' or w2 == 'gouvernement' or w2 == 'canton' \
+                or w2 == 'principauté' or w2 == 'district' or w2 == 'duché':
+            w2 = 'pays'
 
-            ''' on normalise et stock le noeud dans un dictionnaire '''
+        if w2 == 'fleuve' or w2 == 'riviere' or w2 == 'rivière' or w2 == 'lac' or w2 == 'marais' or w2 == 'golfe' or w2 == 'baie':
+            w2 = 'hydronyme'
 
-            k = norm_headwords(head_value.lower())
+        if w2 == 'île' or w2 == 'îles' or w2 == 'isle':
+            w2 = 'île'
 
-            alt_names = ', '.join(d_headwords[k])
+        if w2 == 'ville' or w2 == 'pays' or w2 == 'hydronyme' or w2 == 'montagne' or w2 == 'ruine' or w2 == 'île':
+            type_geo = w2
 
-            #nbwords = sum(1 for _ in div1.findall('.//w'))
-            nbwords = 0
-            for w in div1.findall('.//w'):
-                # sauf PUN et SEN
-                if w.get("type") != 'PUN' and w.get("type") != 'SEN':
-                    nbwords += 1
+    return type_geo
 
-            nbEN = len(div1.findall(".//name"))
-            nbNameEDDA = len(div1.findall(".//name[@type='place'][@subtype='edda']"))
-            nbPers = len(div1.findall(".//name[@type='person']"))
-
-            nbENE = len(div1.findall(".//rs[@type='ene']/rs[@subtype='ene']"))
-            nbENEPlace = len(div1.findall(".//rs[@type='ene']/rs[@type='place'][@subtype='ene']"))
-            nbENEPers = len(div1.findall(".//rs[@type='ene']/rs[@type='person'][@subtype='ene']"))
-
-            nbENEDDAGeocoded = len(div1.findall(".//name[@type='place'][@subtype='edda']/location"))
-            nbENGeocoded = len(div1.findall(".//name[@type='place']/location"))
-
-            latlongValue = []
-            latlong = False
-            for ll in div1.findall(".//rs[@type='place'][@subtype='latlong']/geo"):
-                latlong = True
-
-                latlongValue.append(ll.text)
-
-            w1 = ''
-            w2 = ''
-            # first word : //term[@type='articleClass']/following::w[1]
-            for w in div1.xpath(".//rs[@type='articleClass']/following::w[1]"):
-                w1 = w.text.lower()
-
-            for w in div1.xpath(".//rs[@type='articleClass']/following::w[2]"):
-                w2 = w.text.lower()
-
-            type_geo = ''
-            if w1 != '':
-                if w1 == 'ville' or w1 == 'village' or w1 == 'capitale' or w1 == 'bourgade' or w1 == 'bourg' or w1 == 'cité' or w1 == 'municipe':
-                    w1 = 'ville'
-
-                if w1 == 'pays' or w1 == 'province' or w1 == 'royaume' or w1 == 'contrée' or w1 == 'gouvernement' or w1 == 'canton' \
-                        or w1 == 'principauté' or w1 == 'district' or w1 == 'duché':
-                    w1 = 'pays'
-
-                if w1 == 'fleuve' or w1 == 'riviere' or w1 == 'rivière' or w1 == 'lac' or w1 == 'marais' or w1 == 'golfe' or w1 == 'baie':
-                    w1 = 'hydronyme'
-
-                if w1 == 'île' or w2 == 'îles' or w2 == 'isle':
-                    w1 = 'île'
-
-                if w1 == 'ville' or w1 == 'pays' or w1 == 'hydronyme' or w1 == 'montagne' or w1 == 'ruine' or w1 == 'île':
-                    type_geo = w1
-
-            if w2 != '':
-                if w2 == 'ville' or w2 == 'village' or w2 == 'capitale' or w2 == 'bourgade' or w2 == 'bourg' or w2 == 'cité' or w2 == 'municipe':
-                    w2 = 'ville'
-
-                if w2 == 'pays' or w2 == 'province' or w2 == 'royaume' or w2 == 'contrée' or w2 == 'gouvernement' or w2 == 'canton' \
-                        or w2 == 'principauté' or w2 == 'district' or w2 == 'duché':
-                    w2 = 'pays'
-
-                if w2 == 'fleuve' or w2 == 'riviere' or w2 == 'rivière' or w2 == 'lac' or w2 == 'marais' or w2 == 'golfe' or w2 == 'baie':
-                    w2 = 'hydronyme'
-
-                if w2 == 'île' or w2 == 'îles' or w2 == 'isle':
-                    w2 = 'île'
-
-                if w2 == 'ville' or w2 == 'pays' or w2 == 'hydronyme' or w2 == 'montagne' or w2 == 'ruine' or w2 == 'île':
-                    type_geo = w2
-
-            #  print('nb words: ' + str(nbwords))
-            #  print('nb en: ' + str(nb_en))
-            #  print('nb ene: ' + str(nb_ene))
-            #  print('nb en place: ' + str(nb_en_place))
-            #  print('nb en person: ' + str(nb_en_person))
-            #  print('nb type_equal: ' + str(type_equal))
-            #  print('nb type_different: ' + str(type_different))
-            #  print('latlong: ' + str(latlong))
-            
-            if len(latlongValue) > 0:
-                latlong_val = '; '.join(latlongValue)
+'''
+def get_nb_type(element, arg='type', equal=True):
+    nb = 0
+    for rs in element.findall(".//rs[@subtype='ene']"):
+        ene_type = rs.get(arg)
+        en = rs.find(".//rs")
+        if en is not None:
+            if equal:
+                if ene_type == en.get(arg):
+                    #  print(ene_type + ' == ' + en.get('type'))
+                    nb += 1
             else:
-                latlong_val = ''
-
-            ''' Add node '''
-            G.add_node(k, filename=filename, author=author, normclass=normclass, volume=volume, number=number,
-                       alt_names=alt_names, nb_wrd=nbwords, nb_en=nbEN, nb_ene=nbENE, nb_placeEDDA=nbNameEDDA,
-                       nb_ene_place=nbENEPlace, nb_ENGeocoded=nbENGeocoded, nbENEDDAGeocoded=nbENEDDAGeocoded,
-                       nb_en_pers=nbPers, nb_enePerson=nbENEPers, typegeo=type_geo, latlong=latlong, latlong_value=latlong_val,)
-
-            print('Create node : ' + k + ' = ' + str(d_headwords[k]))
-
-    except etree.XMLSyntaxError as e:
-        print('Error : ' + str(e))
-
-
-
-def get_nb_typeEqual(element):
-    nb = 0
-    for rs in element.findall(".//rs[@subtype='ene']"):
-        ene_type = rs.get('type')
-        en = rs.find(".//rs")
-        if en is not None:
-
-            if ene_type == en.get('type'):
-                #  print(ene_type + ' == ' + en.get('type'))
-                nb += 1
-
+                if ene_type != en.get(arg):
+                    #  print(ene_type + ' == ' + en.get('type'))
+                    nb += 1
     return nb
+'''
 
-
-def get_nb_typeDifferent(element):
-    nb = 0
-    for rs in element.findall(".//rs[@subtype='ene']"):
-        ene_type = rs.get('type')
-        en = rs.find(".//rs")
-        if en is not None:
-
-            if ene_type != en.get('type'):
-                #  print(ene_type + ' != ' + en.get('type'))
-                nb += 1
-
-    return nb
-
-
-def norm_headwords(head_value):
+def norm_headwords(head_value, d_headwords):
 
     '''
     if ', ou ' in head_value:
@@ -465,7 +366,7 @@ def save_edges_as_csv(outputFile, separator, edges):
             fichier.write(content)
 
 
-def save_nodes_as_csv(outputFile, separator, nodes):
+def save_nodes_as_csv(outputFile, separator, nodes, geocoding=False):
 
     content = 'filename' + separator + 'headword' + separator + 'normclass' + separator + 'author' + separator \
               + 'volume' + separator + 'number' + separator + 'alt names' + separator + 'nb wrd' + separator \
@@ -473,10 +374,14 @@ def save_nodes_as_csv(outputFile, separator, nodes):
               + 'nb place EDDA' + separator + 'nb ENE Place' + separator + 'nb EN Geocoded' + separator \
               + 'nb ENE Geocoded' + separator + 'nb EN Person' + separator + 'nb ENE Person' + separator \
               + 'typegeo' + separator + 'latlong' + separator + 'latlong value' + separator \
-              + 'in_degree' + separator + 'out_degree' + separator + '\n'
-              #+ 'nb wiki records' + separator + 'geocoding' + separator + 'lat' + separator + 'long' + separator \
-              #+ 'nbWikiRecords_altNames' + separator + 'geocoding altnames' + separator + 'lat_altNames' + separator \
-              #+ 'long_altNames' + separator 
+              + 'in_degree' + separator + 'out_degree' 
+    
+    if geocoding:
+        content += separator + 'nb wiki records' + separator + 'geocoding' + separator + 'lat' + separator + 'long' + separator \
+                + 'nbWikiRecords_altNames' + separator + 'geocoding altnames' + separator + 'lat_altNames' + separator \
+                + 'long_altNames' 
+
+    content += '\n'
 
     #  G.add_node(k, author=author, normclass=normclass, volume=volume, nb_wrd=nbwords, nb_en=nb_en, nb_ene=nb_ene,
     #                        nb_enPlace=nb_en_place, nb_enPerson=nb_en_person, nb_type_equal=type_equal,
@@ -490,12 +395,15 @@ def save_nodes_as_csv(outputFile, separator, nodes):
                    + separator + str(G.nodes[n]['nb_en_pers']) + separator + str(G.nodes[n]['nb_enePerson']) \
                    + separator + str(G.nodes[n]['typegeo']) + separator + str(G.nodes[n]['latlong']) \
                    + separator + str(G.nodes[n]['latlong_value']) \
-                   + separator + str(G.in_degree(n)) + separator + str(G.out_degree(n)) + separator + '\n'
-                   #+ separator + str(G.nodes[n]['nbWikiRecords']) \
-                   #+ separator + str(G.nodes[n]['geocoding']) + separator + str(G.nodes[n]['latitude']) + separator + str(G.nodes[n]['longitude']) \
-                   #+ separator + str(G.nodes[n]['nbWikiRecords_altNames']) + separator + str(G.nodes[n]['geocoding_altNames']) \
-                   #+ separator + str(G.nodes[n]['lat_altNames']) + separator + str(G.nodes[n]['long_altNames']) \
+                   + separator + str(G.in_degree(n)) + separator + str(G.out_degree(n))
+
+        if geocoding:
+            content += + separator + str(G.nodes[n]['nbWikiRecords']) \
+                   + separator + str(G.nodes[n]['geocoding']) + separator + str(G.nodes[n]['latitude']) + separator + str(G.nodes[n]['longitude']) \
+                   + separator + str(G.nodes[n]['nbWikiRecords_altNames']) + separator + str(G.nodes[n]['geocoding_altNames']) \
+                   + separator + str(G.nodes[n]['lat_altNames']) + separator + str(G.nodes[n]['long_altNames'])
                   
+        content += '\n'
 
     if content is not None:
         with open(outputFile, 'w') as fichier:
@@ -562,6 +470,7 @@ if __name__ == "__main__":
     outputSuffix = 'v20221103'
 
     createNetwork = True
+    geocoding = False
 
     if createNetwork:
 
@@ -570,8 +479,7 @@ if __name__ == "__main__":
 
         G = nx.DiGraph()
 
-
-         # create nodes
+        # create nodes
         for doc in os.listdir(input_path):
             file_id = doc[:-4]
             # print('artcile ' + file_id)
@@ -580,32 +488,8 @@ if __name__ == "__main__":
             if extension == '.xml':
                 m = re.match("\w+-(\d+)", file_id)
                 number = m.groups()[0]
-                create_nodes(input_path, doc, number)
-
-        '''
-        # Connect to the database for geocoding
-        connection = pymysql.connect(
-            host="localhost",
-            user="lmoncla",
-            passwd="lentropie",
-            database="wikiGazetteer"
-        )
-        try:
-            with connection.cursor() as cursor:
-
-                # create nodes
-                for doc in os.listdir(input_path):
-                    file_id = doc[:-4]
-                    # print('artcile ' + file_id)
-                    extension = doc[-4:]
-
-                    if extension == '.xml':
-                        m = re.match("\w+-(\d+)", file_id)
-                        number = m.groups()[0]
-                        create_nodes(input_path, doc, number, cursor)
-        finally:
-            connection.close()
-        '''
+                create_nodes(input_path, doc, number, geocoding)
+        
         # create edges
         for doc in os.listdir(input_path):
             file_id = doc[:-4]
@@ -648,5 +532,3 @@ if __name__ == "__main__":
 
     #save_as_json(output_path + 'graph-'+outputSuffix+'.json', G)
 
-
-    print('done!')

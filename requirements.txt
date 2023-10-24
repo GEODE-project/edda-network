@@ -1,0 +1,5 @@
+jupyter
+pandas
+networkx
+pymysql
+lxml

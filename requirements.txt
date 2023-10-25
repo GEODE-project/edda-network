@@ -4,3 +4,5 @@ networkx
 pymysql
 lxml
 tqdm
+matplotlib
+scipy
